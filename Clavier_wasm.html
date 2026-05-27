@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Clavier — Local (Verovio WASM)</title>
+<link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.9.0/dist/tabler-icons.min.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#fff;--bg2:#f9fafb;--border:#e5e7eb;--border2:#d1d5db;
+  --text:#111827;--text2:#6b7280;--text3:#9ca3af;
+  --r:6px;--rl:10px;--font:"Inter",system-ui,sans-serif}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px}
+select,button{font-family:var(--font)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+/* Make Verovio SVG pages responsive */
+.score-page{background:#fff;border-radius:6px;border:1px solid var(--border);
+  overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.score-page svg{width:100%!important;height:auto!important;display:block}
+</style>
+
+<!-- Verovio JS removed: the browser build does not support Humdrum/kern input.
+     Score rendering is done server-side (Python Verovio via /render/<piece_id>).
+     The browser just displays the server-rendered SVGs and applies overlays via getBBox(). -->
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React
+const API_BASE = `${window.location.protocol}//${window.location.host}`
+
+function useMobile() {
+  const [mobile, setMobile] = useState(window.innerWidth <= 768)
+  useEffect(()=>{
+    const h = () => setMobile(window.innerWidth <= 768)
+    window.addEventListener("resize", h)
+    return () => window.removeEventListener("resize", h)
+  }, [])
+  return mobile
+}
+
+// ── Piece catalogue ───────────────────────────────────────────────────────────
+const PIECES = [
+  {id:"wtc1f19",    composer:"Bach, J.S.",      title:"WTC I — Fugue 19 in A major",  opus:"BWV 864b",      era:"Baroque",   key:"A major",  sig:"9/8"},
+  {id:"wtc1f20",    composer:"Bach, J.S.",      title:"WTC I — Fugue 20 in A minor",  opus:"BWV 865b",      era:"Baroque",   key:"A minor",  sig:"4/4"},
+  {id:"wtc1f24",    composer:"Bach, J.S.",      title:"WTC I — Fugue 24 in B minor",  opus:"BWV 869b",      era:"Baroque",   key:"B minor",  sig:"4/4"},
+  {id:"chopin-n72", composer:"Chopin, F.",      title:"Nocturne in E minor",          opus:"Op.72 No.1",    era:"Romantic",  key:"E minor",  sig:"4/4"},
+  {id:"schub-op90", composer:"Schubert, F.",    title:"Impromptu in G♭ major",        opus:"D.899 Op.90/3", era:"Romantic",  key:"G♭ major", sig:"4/2"},
+  {id:"brahms-bal", composer:"Brahms, J.",      title:"Ballade No.1 in D minor",      opus:"Op.10 No.1",    era:"Romantic",  key:"D minor",  sig:"4/4"},
+  {id:"brahms-w1",  composer:"Brahms, J.",      title:"Waltz in B major",             opus:"Op.39 No.1",    era:"Romantic",  key:"B major",  sig:"3/4"},
+  {id:"beet-moon",  composer:"Beethoven, L.v.", title:"Sonata 'Moonlight' — I",       opus:"Op.27 No.2",    era:"Classical", key:"C♯ minor", sig:"2/2"},
+  {id:"beet-path",  composer:"Beethoven, L.v.", title:"Sonata 'Pathétique' — I",      opus:"Op.13",         era:"Classical", key:"C minor",  sig:"4/4"},
+  {id:"mozart-k331",composer:"Mozart, W.A.",    title:"Sonata K.331 — Thema",         opus:"K.331",         era:"Classical", key:"A major",  sig:"6/8"},
+]
+
+// ── System prompts ────────────────────────────────────────────────────────────
+const A2_SYS = `You are Agent 2 in Clavier — the Harmonic Analyzer. Input: full Humdrum kern score.
+Return ONLY valid JSON, no markdown, no code fences:
+{"key":string,"time_signature":string,"total_bars":number,"formal_sections":[{"label":string,"bar_start":number,"bar_end":number}],"key_regions":[{"key":string,"bar_start":number,"bar_end":number}],"modulations":[{"bar":number,"from_key":string,"to_key":string,"type":string,"pivot_chord":string|null}],"cadences":[{"bar":number,"beat":number,"type":string,"key":string}],"chord_labels":[{"bar":number,"beat":number,"roman_numeral":string}],"themes":[{"id":string,"bar_start":number,"bar_end":number,"description":string}]}
+chord_labels: structurally significant chords only — max 2 per bar (strong beats + cadence/modulation chords). Roman numeral only, no chord name needed.
+Cadence types: PAC, IAC, HC, DC, Deceptive, Evaded, Plagal.
+Modulation types: diatonic,chromatic_mediant,neapolitan,enharmonic,modal_mixture,tonicization.
+Scholarly. Correct Roman numerals with accidentals where needed.`
+
+const A3_SYS = `You are Agent 3 in Clavier. Given Agent 2's harmonic analysis, write a 2-sentence overview and assign cross-piece tags.
+Return ONLY valid JSON, no markdown:
+{"overview":string,"cross_piece_tags":[string]}
+overview: the piece's harmonic character and most distinctive feature.
+cross_piece_tags: 4-8 tags from: fugue prelude nocturne impromptu ballade sonata_form ternary binary theme_and_variations chromatic_mediant neapolitan modal_mixture enharmonic_modulation circle_of_fifths pedal_point counterpoint arpeggiated_bass alberti_bass lyrical tragic dramatic meditative intimate melancholic`
+
+const EVAL_SYS = `Musicology research assistant. Find 3 authoritative published analyses. Priority: peer-reviewed journals, then academic books, then Grove Music.
+Return ONLY valid JSON: {"sources":[{"title":string,"author":string,"year":number|null,"type":"academic"|"book"|"criticism","publication":string,"url":string,"description":string}]}`
+
+const SIM_SYS = `Music similarity analyst. Given the current piece, do two tasks:
+1) Rate similarity (0-100) to each corpus piece.
+2) From training knowledge, group corpus pieces by shared elements.
+Return ONLY valid JSON, no markdown:
+{"similarities":[{"id":string,"score":number,"reason":string}],"corpus_by_cadences":[{"cadence_type":string,"pieces":[string]}],"corpus_by_modulations":[{"modulation_type":string,"pieces":[string]}],"corpus_by_tags":[{"tag":string,"pieces":[string]}]}
+reason≤12 words. Only groups with ≥1 piece. Use exact corpus IDs.`
+
+const SOUL_SYS = `You are the Soul Writer for Clavier. Write three short paragraphs about a piano piece for a pianist without conservatory training who wants to understand what makes this piece distinctive and how it connects to a similar work.
+
+You receive Agent 2's full harmonic analysis JSON for the current piece, plus metadata about the most harmonically similar piece in the corpus.
+
+Write in programme-note style: analytically precise, bar-cited where possible from Agent 2's JSON, but accessible enough that the pianist can explain it to a non-musician audience.
+
+Return ONLY valid JSON, no markdown:
+{"signature":string,"significance":string,"connection":string}
+
+signature (2–3 sentences): What makes this piece harmonically and structurally itself. Cite specific bar numbers, key regions, cadence types, or modulations directly from Agent 2's JSON. Be factually accurate — do not invent musical events not present in the data.
+
+significance (1–2 sentences): Why that harmonic character matters — what emotional or expressive effect it creates. Plain language only; no jargon a non-musician could not follow.
+
+connection (2–3 sentences): How this piece's defining character echoes in or was inspired by the most similar piece. Draw on your musicological knowledge of the similar piece. Do not fabricate bar numbers for the similar piece since it has not been analysed — instead describe the shared technique or expressive instinct precisely. Phrase claims about the similar piece as informed observations, not certainties.`
+
+const CADS_COL = {"PAC":"#1d4ed8","IAC":"#60a5fa","HC":"#f59e0b","DC":"#dc2626","Deceptive":"#dc2626","Evaded":"#7c3aed","Plagal":"#059669"}
+
+// ── Colour helpers ────────────────────────────────────────────────────────────
+const SCOLS={introduction:"#8b5cf6",intro:"#8b5cf6",exposition:"#3b82f6","theme a":"#3b82f6","first theme":"#3b82f6",development:"#f97316","theme b":"#f97316",recapitulation:"#10b981",recap:"#10b981",coda:"#ef4444",fugue:"#3b82f6",subject:"#3b82f6",episode:"#06b6d4",stretto:"#84cc16","a":"#3b82f6","b":"#f97316","a'":"#10b981",theme:"#3b82f6",variation:"#06b6d4"}
+function scol(l=""){const s=l.toLowerCase();for(const[k,v]of Object.entries(SCOLS))if(s.includes(k))return v;return"#6b7280"}
+const KCOLS=["#3b82f6","#10b981","#f97316","#8b5cf6","#06b6d4","#ef4444","#84cc16","#f59e0b"]
+const ERA_COL={Baroque:"#f59e0b",Classical:"#3b82f6",Romantic:"#10b981"}
+
+// ── Score loading (server-side Python Verovio) ───────────────────────────────
+// The Verovio JS/WASM browser build does NOT support Humdrum/kern as input.
+// Python Verovio (server.py) does. We fetch pre-rendered SVG pages from
+// GET /render/<piece_id> which returns a JSON array of SVG strings.
+// Pages are cached on the server so subsequent loads are instant.
+
+async function loadScorePages(pieceId, onProgress) {
+  onProgress && onProgress("Rendering score with Python Verovio…")
+  const res = await fetch(`${API_BASE}/render/${pieceId}`)
+  const body = await res.json().catch(() => null)
+  if (!res.ok) {
+    // body.error contains Verovio's getLog() output — show it in full
+    const msg = body?.error || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  if (!Array.isArray(body)) throw new Error(body?.error || "Unexpected response")
+  console.log(`[Score] ${body.length} pages received for ${pieceId}`)
+  return body
+}
+
+async function tryBuildVrv() {
+  // Pattern 1 — verovio global (most Verovio builds, non-modularized)
+  if (typeof window.verovio?.toolkit === "function") {
+    console.log("[Verovio] using window.verovio.toolkit")
+    return new window.verovio.toolkit()
+  }
+  // Pattern 2 — Module global (Emscripten standard)
+  if (typeof window.Module?.toolkit === "function") {
+    console.log("[Verovio] using window.Module.toolkit")
+    return new window.Module.toolkit()
+  }
+  // Pattern 3 — createVerovioModule factory (Emscripten MODULARIZE=1)
+  if (typeof window.createVerovioModule === "function") {
+    console.log("[Verovio] calling createVerovioModule()")
+    const m = await window.createVerovioModule()
+    console.log("[Verovio] module resolved, toolkit:", typeof m.toolkit)
+    return new m.toolkit()
+  }
+  return null
+}
+
+async function initVerovio() {
+  logVrvDiagnostic("at initVerovio() start")
+
+  // Try immediately (script may have already finished)
+  let tk = await tryBuildVrv()
+  if (tk) { vrvInstance = tk; return tk }
+
+  // Poll until any pattern becomes available
+  for (let i = 0; i < 300; i++) {
+    await new Promise(r => setTimeout(r, 200))
+    tk = await tryBuildVrv()
+    if (tk) { vrvInstance = tk; return tk }
+    if (i === 49)  logVrvDiagnostic("at 10 s")
+    if (i === 149) logVrvDiagnostic("at 30 s")
+  }
+
+  logVrvDiagnostic("TIMEOUT at 60 s")
+  throw new Error(
+    "Verovio did not initialize in 60 s. " +
+    "Open DevTools → Console and look for the [Verovio diagnostic] lines " +
+    "to see which globals exist. Copy them here for debugging."
+  )
+}
+
+function renderKernToPages(kern) {
+  if (!vrvInstance) throw new Error("Verovio not ready")
+
+  // ── Diagnostic: list all methods on the toolkit ───────────────────────────
+  const allKeys = []
+  let _o = vrvInstance
+  while (_o && _o !== Object.prototype) {
+    Object.getOwnPropertyNames(_o).forEach(k => { if (!allKeys.includes(k)) allKeys.push(k) })
+    _o = Object.getPrototypeOf(_o)
+  }
+  console.log("[Vrv] toolkit keys:", allKeys.filter(k=>k!=='constructor').join(", "))
+
+  // ── setOptions: try progressively simpler option sets ────────────────────
+  // Verovio's schema validator rejects the ENTIRE JSON if any key is unknown.
+  // We try four sets from most to least specific so we always get SOME layout.
+  const optSets = [
+    {scale:40, pageWidth:2200, pageHeight:2970, breaks:"auto"},
+    {scale:40, adjustPageHeight:0},
+    {scale:40},
+    {}
+  ]
+  for (const opts of optSets) {
+    const js = JSON.stringify(opts)
+    try {
+      const r = vrvInstance.setOptions(js)
+      if (r !== false) { console.log("[Vrv] setOptions OK:", js); break }
+      console.warn("[Vrv] setOptions returned false for:", js)
+    } catch(e) {
+      console.warn("[Vrv] setOptions threw for:", js, "—", e.message)
+    }
+  }
+
+  // ── Verify kern content before passing to Verovio ────────────────────────
+  const lines = kern.split("\n")
+  console.log("[Vrv] kern lines:", lines.length, "| line[0]:", lines[0], "| line[1]:", lines[1])
+
+  // ── Smoke-test with minimal kern to verify format support ─────────────────
+  const MINI = "**kern\n*clefG2\n*k[]\n*C:\n*M4/4\n=1\n4c\n4e\n4g\n4cc\n==\n*-"
+  const miniOk = vrvInstance.loadData(MINI)
+  console.log("[Vrv] minimal kern test:", miniOk, miniOk ? "("+vrvInstance.getPageCount()+" pages)" : "FAILED")
+
+  // ── Load actual kern ──────────────────────────────────────────────────────
+  const loaded = vrvInstance.loadData(kern)
+  console.log("[Vrv] actual kern loadData:", loaded)
+
+  if (!loaded) {
+    console.error("[Vrv] loadData failed. kern[:500]:", kern.slice(0, 500))
+    // If minimal kern worked, the issue is with this specific kern file.
+    // If minimal kern also failed, Verovio doesn't support kern on this build.
+    if (!miniOk) console.error("[Vrv] Even minimal kern failed — this Verovio build may not support Humdrum input")
+    return []
+  }
+
+  const n = vrvInstance.getPageCount()
+  console.log("[Vrv] rendering", n, "pages")
+  return Array.from({length: n}, (_, i) => vrvInstance.renderToSVG(i + 1))
+}
+
+// ── API (via local proxy) ──────────────────────────────────────────────────────
+async function apiPost(body) {
+  const r = await fetch(`${API_BASE}/api/messages`, {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  })
+  // Guard: server.py proxy always returns JSON, but handle HTML edge-cases
+  const ct = r.headers.get("content-type") || ""
+  if (!ct.includes("json")) {
+    const txt = await r.text().catch(()=>"")
+    throw new Error(`HTTP ${r.status} — non-JSON response: ${txt.slice(0,300)}`)
+  }
+  const d = await r.json()
+  if (!r.ok) throw new Error(d?.error?.message || `HTTP ${r.status}`)
+  return d
+}
+
+const getText = d => d.content?.find(b=>b.type==="text")?.text || ""
+
+
+
+function parseJ(t) {
+  if (!t) return null
+  const start = t.indexOf("{")
+  if (start === -1) return null
+  let depth = 0
+  for (let i = start; i < t.length; i++) {
+    if (t[i] === "{") depth++
+    else if (t[i] === "}") { if (--depth === 0) { try { return JSON.parse(t.slice(start, i+1)) } catch { return null } } }
+  }
+  return null
+}
+
+async function callA2(kern) {
+  const d = await apiPost({
+    model:"claude-sonnet-4-6", max_tokens:8192, system:A2_SYS,
+    messages:[{role:"user",content:`Analyze this complete kern score:\n\n${kern}`}]
+  })
+  const raw = getText(d)
+  console.log("[A2] stop_reason:", d.stop_reason, "chars:", raw.length)
+  if (d.stop_reason==="max_tokens") console.warn("[A2] TRUNCATED")
+  if (!raw) { console.error("[A2] empty response:", JSON.stringify(d)); throw new Error("Agent 2: empty response") }
+  const r = parseJ(raw)
+  if (!r) { console.error("[A2] no JSON in:", raw.slice(0,800)); throw new Error("Agent 2: no JSON") }
+  return r
+}
+async function callA3(a2) {
+  const d = await apiPost({model:"claude-sonnet-4-6",max_tokens:2000,system:A3_SYS,
+    messages:[{role:"user",content:JSON.stringify(a2)}]})
+  const r = parseJ(getText(d))
+  if (!r) throw new Error("Agent 3: no JSON")
+  return r
+}
+async function callEval(piece) {
+  // web_search_20250305 only works inside Claude.ai artifacts, not raw API calls.
+  // Use training knowledge instead — Claude knows extensive musicological literature.
+  const d = await apiPost({model:"claude-sonnet-4-6", max_tokens:2000, system:EVAL_SYS,
+    messages:[{role:"user",content:`Identify 3 authoritative published analyses of: ${piece.composer} — ${piece.title} ${piece.opus}`}]})
+  return parseJ(getText(d))?.sources || []
+}
+async function callSim(a2data, piece) {
+  const others = PIECES.filter(p=>p.id!==piece.id)
+  const modTypes = [...new Set((a2data.modulations||[]).map(m=>m.type))].join(", ")||"none"
+  const cadTypes = [...new Set((a2data.cadences||[]).map(c=>c.type))].join(", ")||"none"
+  const d = await apiPost({model:"claude-sonnet-4-6", max_tokens:2000, system:SIM_SYS,
+    messages:[{role:"user",content:
+      `Current: "${piece.composer} — ${piece.title}" (${piece.era}, ${piece.key})\n`+
+      `Modulation types: ${modTypes} | Cadence types: ${cadTypes}\n`+
+      `Corpus IDs:\n${others.map(p=>`"${p.id}": ${p.composer} — ${p.title} (${p.era})`).join("\n")}`}]})
+  return parseJ(getText(d)) || {similarities:[],corpus_by_cadences:[],corpus_by_modulations:[],corpus_by_tags:[]}
+}
+
+async function callSoul(a2data, piece, topSim) {
+  const topPiece = PIECES.find(p => p.id === topSim.id)
+  const d = await apiPost({
+    model:"claude-sonnet-4-6", max_tokens:1500, system:SOUL_SYS,
+    messages:[{role:"user", content:
+      `Current piece: ${piece.composer} — ${piece.title} (${piece.opus}), ${piece.era}, ${piece.key}\n\n` +
+      `Agent 2 harmonic analysis:\n${JSON.stringify(a2data)}\n\n` +
+      `Most similar piece in corpus: ${topPiece.composer} — ${topPiece.title} (${topPiece.opus}), ${topPiece.era}, ${topPiece.key}\n` +
+      `Similarity score: ${topSim.score}%\nSimilarity reason: ${topSim.reason}`
+    }]
+  })
+  const r = parseJ(getText(d))
+  if (!r) throw new Error("Soul: no JSON")
+  return r
+}
+
+
+function applyOverlay(container, a2, mode="keys", mobile=false) {
+  if (!container || !a2) return
+  container.querySelectorAll("[data-sm]").forEach(el=>el.remove())
+
+  let barNum=0; const barMap={}
+  container.querySelectorAll(".score-page").forEach(pg=>{
+    const svgEl=pg.querySelector("svg"); if(!svgEl) return
+    svgEl.querySelectorAll("g.measure").forEach(m=>{
+      barNum++
+      try{
+        const bb=m.getBBox(),ctm=m.getCTM(),pt=svgEl.createSVGPoint()
+        pt.x=bb.x;pt.y=bb.y;const tl=pt.matrixTransform(ctm)
+        pt.x=bb.x+bb.width;pt.y=bb.y+bb.height;const br=pt.matrixTransform(ctm)
+        const w=br.x-tl.x,h=br.y-tl.y
+        if(w>0&&h>0) barMap[barNum]={svgEl,x:tl.x,y:tl.y,w,h}
+      }catch{}
+    })
+  })
+  console.log(`[Overlay] mode=${mode} bars in SVG: 1–${barNum}`)
+
+  const addRect=(svgEl,x,y,w,h,fill,op,behind=false)=>{
+    const el=document.createElementNS("http://www.w3.org/2000/svg","rect")
+    ;["x","y","width","height"].forEach((a,i)=>el.setAttribute(a,[x,y,Math.max(0,w),Math.max(1,h)][i]))
+    el.setAttribute("fill",fill);el.setAttribute("fill-opacity",op)
+    el.setAttribute("rx","1");el.setAttribute("pointer-events","none");el.setAttribute("data-sm","ov")
+    if(behind){const fc=svgEl.firstElementChild;if(fc)svgEl.insertBefore(el,fc);else svgEl.appendChild(el)}
+    else svgEl.appendChild(el)
+  }
+  // Label at BOTTOM-LEFT of each region segment
+  const addLabel=(svgEl,x,y,text,color,mobile=false)=>{
+    const fs = mobile ? 8 : 11
+    const estW = Math.min(text.length * fs * 0.58 + 8, 160)
+    const bgH = fs + 5
+    // White pill behind text for readability over score notation
+    const bg = document.createElementNS("http://www.w3.org/2000/svg","rect")
+    bg.setAttribute("x", x+3); bg.setAttribute("y", y - fs - 3)
+    bg.setAttribute("width", estW); bg.setAttribute("height", bgH)
+    bg.setAttribute("fill","#ffffff"); bg.setAttribute("fill-opacity","0.72")
+    bg.setAttribute("rx","2"); bg.setAttribute("pointer-events","none")
+    bg.setAttribute("data-sm","ov"); svgEl.appendChild(bg)
+    const el=document.createElementNS("http://www.w3.org/2000/svg","text")
+    el.setAttribute("x",x+5);el.setAttribute("y",y-4)
+    el.setAttribute("fill",color);el.setAttribute("fill-opacity","0.95")
+    el.setAttribute("font-size",String(fs));el.setAttribute("font-weight","600")
+    el.setAttribute("font-family","sans-serif");el.setAttribute("data-sm","ov")
+    el.textContent=text;svgEl.appendChild(el)
+  }
+
+  // Merge consecutive bars on same system → one rect + bottom-left label per segment
+  const drawMerged=(bar_start,bar_end,color,opacity,label=null,behind=true)=>{
+    let grp=null
+    const flush=()=>{
+      if(!grp) return
+      addRect(grp.svgEl,grp.x,grp.y,grp.x2-grp.x,grp.h,color,opacity,behind)
+      if(label) addLabel(grp.svgEl,grp.x,grp.y+grp.h,label,color,mobile)
+      grp=null
+    }
+    for(let b=bar_start;b<=bar_end;b++){
+      const i=barMap[b]; if(!i){flush();continue}
+      if(!grp){grp={svgEl:i.svgEl,x:i.x,x2:i.x+i.w,y:i.y,h:i.h}}
+      else if(grp.svgEl===i.svgEl&&Math.abs(i.y-grp.y)<40){
+        grp.x=Math.min(grp.x,i.x);grp.x2=Math.max(grp.x2,i.x+i.w);grp.h=Math.max(grp.h,i.h)
+      }else{flush();grp={svgEl:i.svgEl,x:i.x,x2:i.x+i.w,y:i.y,h:i.h}}
+    }
+    flush()
+  }
+
+  if (mode==="keys") {
+    ;(a2.key_regions||[]).forEach((kr,idx)=>{
+      drawMerged(kr.bar_start,kr.bar_end,KCOLS[idx%KCOLS.length],"0.14",kr.key)
+    })
+    // Cadence markers below the keys label (below staff bottom)
+    ;(a2.cadences||[]).forEach(cad=>{
+      const i=barMap[cad.bar];if(!i)return
+      const col=CADS_COL[cad.type]||"#6b7280"
+      addRect(i.svgEl,i.x,i.y,3,i.h,col,"0.85")
+      // Label below bottom of bar (below the keys label which is at y+h-4)
+      const el=document.createElementNS("http://www.w3.org/2000/svg","text")
+      el.setAttribute("x",i.x+5);el.setAttribute("y",i.y+i.h+13)
+      el.setAttribute("fill",col);el.setAttribute("fill-opacity","0.85")
+      el.setAttribute("font-size",mobile?"8":"10");el.setAttribute("font-weight","500")
+      el.setAttribute("font-family","sans-serif");el.setAttribute("data-sm","ov")
+      el.textContent=cad.type;i.svgEl.appendChild(el)
+    })
+
+  } else if (mode==="sections") {
+    ;(a2.formal_sections||[]).forEach(s=>{
+      drawMerged(s.bar_start,s.bar_end,scol(s.label),"0.18",s.label)
+    })
+
+  } else if (mode==="themes") {
+    const TC=["#8b5cf6","#ec4899","#06b6d4","#84cc16","#f59e0b","#14b8a6"]
+    console.log("[Themes] Agent 2 total_bars:", a2.total_bars,
+                "barMap:", Object.keys(barMap).length, "entries (1–"+barNum+")")
+    ;(a2.themes||[]).forEach((t,idx)=>{
+      console.log(`[Themes] ${t.id} bars ${t.bar_start}–${t.bar_end}: barMap[${t.bar_start}]=`,
+                  barMap[t.bar_start]?"found":"MISSING",
+                  `barMap[${t.bar_end}]=`,barMap[t.bar_end]?"found":"MISSING")
+      const color=TC[idx%TC.length]
+      // Faint full-height tint behind notation
+      drawMerged(t.bar_start,t.bar_end,color,"0.09",null,true)
+      // Solid thin strip along TOP edge (stacked by theme index so overlaps are visible)
+      const stripH=10, stripY_offset=idx*11
+      let grp=null
+      const flush=()=>{
+        if(!grp)return
+        addRect(grp.svgEl,grp.x,grp.y+stripY_offset,grp.x2-grp.x,stripH,color,"0.80",false)
+        addLabel(grp.svgEl,grp.x,grp.y+grp.h,(t.description||t.id).split(' ').slice(0,3).join(' '),color,mobile)
+        grp=null
+      }
+      for(let b=t.bar_start;b<=t.bar_end;b++){
+        const i=barMap[b];if(!i){flush();continue}
+        if(!grp){grp={svgEl:i.svgEl,x:i.x,x2:i.x+i.w,y:i.y,h:i.h}}
+        else if(grp.svgEl===i.svgEl&&Math.abs(i.y-grp.y)<40){
+          grp.x=Math.min(grp.x,i.x);grp.x2=Math.max(grp.x2,i.x+i.w);grp.h=Math.max(grp.h,i.h)
+        }else{flush();grp={svgEl:i.svgEl,x:i.x,x2:i.x+i.w,y:i.y,h:i.h}}
+      }
+      flush()
+    })
+
+  } else if (mode==="cadences") {
+    ;(a2.cadences||[]).forEach(cad=>{
+      const i=barMap[cad.bar];if(!i)return
+      const col=CADS_COL[cad.type]||"#6b7280"
+      addRect(i.svgEl,i.x,i.y,i.w,i.h,col,"0.13",true)
+      addRect(i.svgEl,i.x,i.y,3,i.h,col,"0.85")
+      addLabel(i.svgEl,i.x,i.y+i.h,cad.key?`${cad.type} · ${cad.key}`:cad.type,col,mobile)
+    })
+  }
+
+  // ── Roman numerals — shown in Keys and Cadence modes ──────────────────────
+  if (mode==="keys" || mode==="cadences") {
+    const chordsByBar={}
+    ;(a2.chord_labels||[]).forEach(c=>{
+      if(!chordsByBar[c.bar]) chordsByBar[c.bar]=[]
+      chordsByBar[c.bar].push(c)
+    })
+    const ts=(a2.time_signature||"4/4").split("/")
+    const bpb=parseFloat(ts[0])||4   // beats per bar
+
+    Object.entries(chordsByBar).forEach(([barN,chords])=>{
+      const i=barMap[parseInt(barN)]; if(!i) return
+      chords.sort((a,b)=>a.beat-b.beat)
+      // Vertical: Keys → below key label (y+h-4) and cadence label (y+h+13), so y+h+26
+      //           Cadences → below cadence label (y+h-4), so y+h+13
+      const rnY = mode==="keys" ? i.y+i.h+26 : i.y+i.h+13
+      chords.forEach(c=>{
+        const frac=Math.min(Math.max((c.beat-1)/bpb, 0), 0.92)
+        const el=document.createElementNS("http://www.w3.org/2000/svg","text")
+        el.setAttribute("x", i.x + frac*i.w + 3)
+        el.setAttribute("y", rnY)
+        el.setAttribute("fill","#1e293b"); el.setAttribute("fill-opacity","0.78")
+        el.setAttribute("font-size", mobile ? "8" : "10"); el.setAttribute("font-family","Georgia,serif")
+        el.setAttribute("font-style","italic"); el.setAttribute("data-sm","ov")
+        el.textContent=c.roman_numeral
+        i.svgEl.appendChild(el)
+      })
+    })
+  }
+}
+
+// ── Timeline SVG ──────────────────────────────────────────────────────────────
+
+
+function Timeline({a2}) {
+  if (!a2) return null
+  const total = a2.total_bars||50
+  const PX_PER_BAR = 16                          // min pixels per bar — labels need ~16px to not overlap
+  const ML=48, MT=14, H=112
+  const W  = Math.max(680, ML + 8 + total * PX_PER_BAR)
+  const tw = W - ML - 8
+  const bx = bar => ML + ((bar-1)/total) * tw
+  // Show a tick label every N bars depending on total length
+  const tickStep = total <= 30 ? 5 : total <= 70 ? 10 : 14
+  const ticks = Array.from({length: Math.floor((total-1)/tickStep)+2}, (_, i) => i===0 ? 1 : Math.min(i*tickStep, total))
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:`${W}px`, display:"block"}}>
+      {[["FORM",MT+11],["KEYS",MT+37],["CADS",MT+63]].map(([l,y])=>(
+        <text key={l} x={ML-4} y={y} textAnchor="end" fontSize="9" fill="#9ca3af" fontWeight="500">{l}</text>
+      ))}
+      {ticks.map((bar,i)=>{const x=bx(bar);return(
+        <g key={i}>
+          <line x1={x} y1={MT} x2={x} y2={H-8} stroke="#e5e7eb" strokeWidth=".5"/>
+          <text x={x} y={H} fontSize="8" textAnchor="middle" fill="#9ca3af">{bar}</text>
+        </g>
+      )})}
+      {(a2.formal_sections||[]).map((s,i)=>{
+        const x1=bx(s.bar_start),x2=bx(s.bar_end+1),c=scol(s.label),w=Math.max(0,x2-x1)
+        return(<g key={i}><rect x={x1} y={MT} width={w} height={18} fill={c} fillOpacity=".18" rx="2"/><rect x={x1} y={MT} width={2} height={18} fill={c} fillOpacity=".8"/>{w>18&&<text x={x1+5} y={MT+12} fontSize="9" fill={c} fillOpacity=".9" fontWeight="500">{s.label}</text>}</g>)
+      })}
+      {(a2.key_regions||[]).map((kr,i)=>{
+        const x1=bx(kr.bar_start),x2=bx(kr.bar_end+1),c=KCOLS[i%KCOLS.length],w=Math.max(0,x2-x1)
+        return(<g key={i}><rect x={x1} y={MT+22} width={w} height={14} fill={c} fillOpacity=".25" rx="2"/>{w>20&&<text x={x1+4} y={MT+32} fontSize="8" fill={c} fillOpacity=".9">{kr.key}</text>}</g>)
+      })}
+      {(a2.cadences||[]).map((c,i)=>{
+        const x=bx(c.bar), col=CADS_COL[c.type]||"#6b7280"
+        return(<g key={i}>
+          <line x1={x} y1={MT+44} x2={x} y2={MT+60} stroke={col} strokeWidth="1.5" strokeOpacity=".85"/>
+          <circle cx={x} cy={MT+62} r="2.5" fill={col} fillOpacity=".85"/>
+          {<text x={x+3} y={MT+70} fontSize="7" fill={col} fillOpacity=".9">{c.type}</text>}
+        </g>)
+      })}
+    </svg>
+  )
+}
+
+// ── Shared style tokens ───────────────────────────────────────────────────────
+const S = {
+  idle:    {display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"140px",color:"#9ca3af",fontSize:"13px",gap:"6px"},
+  load:    {display:"flex",alignItems:"center",gap:"8px",padding:".5rem 0",color:"#6b7280",fontSize:"13px"},
+  err:     {fontSize:"12px",color:"#dc2626",padding:".4rem 0",wordBreak:"break-word"},
+  kv:      {display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #f3f4f6",fontSize:"12px",gap:"8px"},
+  divider: {height:"1px",background:"#f3f4f6",margin:"10px 0"},
+  sec:     {fontSize:"11px",fontWeight:"500",color:"#6b7280",marginBottom:"4px"},
+  row:     {display:"flex",alignItems:"center",gap:"8px",padding:"3px 0",fontSize:"12px"},
+  dot:     {width:"8px",height:"8px",borderRadius:"50%",flexShrink:0},
+  pill:    {display:"inline-flex",fontSize:"11px",padding:"2px 8px",borderRadius:"100px",background:"#f3f4f6",border:"1px solid #e5e7eb",margin:"2px",color:"#6b7280"},
+  card:    {background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,padding:"14px 16px",minHeight:"180px"},
+  chdr:    {display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px"},
+}
+const badge=(bg,tc)=>({fontSize:"10px",padding:"2px 7px",borderRadius:6,fontWeight:"500",background:bg,color:tc})
+function Spin(){return <div style={{width:"14px",height:"14px",border:"1.5px solid #e5e7eb",borderTopColor:"#3b82f6",borderRadius:"50%",flexShrink:0,animation:"spin .7s linear infinite"}}/>}
+
+// ── Analysis panels ───────────────────────────────────────────────────────────
+function A2Panel({status,data,error}){
+  if(status==="idle")    return <div style={S.idle}><i className="ti ti-search" style={{fontSize:"20px"}}/><span>Awaiting analysis</span></div>
+  if(status==="loading") return <div style={S.load}><Spin/><span>Agent 2 analyzing full kern…</span></div>
+  if(status==="error")   return <div style={S.err}><i className="ti ti-alert-circle"/> {error||"Failed"}</div>
+  if(!data) return null
+    return(<div>
+    {[["Key",data.key],["Time sig",data.time_signature],["Total bars",data.total_bars]].map(([l,v])=>(
+      <div key={l} style={S.kv}><span style={{color:"#6b7280"}}>{l}</span><span style={{fontWeight:"500"}}>{v}</span></div>
+    ))}
+    {data.formal_sections?.length>0&&<><div style={S.divider}/><div style={S.sec}>Formal sections</div>
+      {data.formal_sections.map((s,i)=><div key={i} style={S.row}><div style={{...S.dot,background:scol(s.label)}}/><span style={{flex:1}}>{s.label}</span><span style={{fontSize:"10px",color:"#9ca3af"}}>mm.{s.bar_start}–{s.bar_end}</span></div>)}</>}
+    {data.cadences?.length>0&&<><div style={S.divider}/><div style={S.sec}>Cadences ({data.cadences.length})</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>
+        {data.cadences.map((c,i)=>(
+          <span key={i} style={{fontSize:"10px",padding:"1px 6px",borderRadius:"100px",background:(CADS_COL[c.type]||"#6b7280")+"22",color:CADS_COL[c.type]||"#6b7280",border:`1px solid ${CADS_COL[c.type]||"#6b7280"}44`,fontWeight:"500"}}>
+            m.{c.bar} {c.type}
+          </span>
+        ))}
+      </div></>}
+    {data.modulations?.length>0&&<><div style={S.divider}/><div style={S.sec}>Modulations</div>
+      {data.modulations.map((m,i)=><div key={i} style={{...S.row,gap:"5px",color:"#6b7280"}}>
+        <span style={{fontSize:"10px",background:"#f3f4f6",padding:"1px 5px",borderRadius:"4px",fontWeight:"500",color:"#111827"}}>m.{m.bar}</span>
+        <span>{m.from_key}</span><span style={{color:"#d1d5db"}}>→</span><span>{m.to_key}</span>
+        <span style={{fontSize:"10px",color:"#9ca3af"}}>({m.type})</span>
+      </div>)}</>}
+    {data.themes?.length>0&&<><div style={S.divider}/><div style={S.sec}>Themes</div>
+      {data.themes.map((t,i)=><div key={i} style={{fontSize:"12px",padding:"2px 0"}}>
+        <span style={{fontWeight:"500"}}>{t.id}</span><span style={{color:"#9ca3af",fontSize:"10px"}}> mm.{t.bar_start}–{t.bar_end}</span>
+        <div style={{fontSize:"11px",color:"#9ca3af",marginTop:"1px"}}>{t.description}</div>
+      </div>)}</>}
+  </div>)
+}
+
+function CorpusSimilarityPanel({a3Status,a3Data,simStatus,simData}) {
+  // top-level sections: expanded by default
+  const [open,    setOpen]    = React.useState({cad:true, mod:true, tag:true})
+  // atom-level entries: all collapsed by default; keyed "cad_0", "mod_2", etc.
+  const [openAtom, setOpenAtom] = React.useState({})
+
+  const tog     = key => setOpen(o=>({...o,[key]:!o[key]}))
+  const togAtom = key => setOpenAtom(o=>({...o,[key]:!o[key]}))
+
+  const loading = a3Status==="loading" || simStatus==="loading"
+  if (a3Status==="idle") return <div style={S.idle}><i className="ti ti-database" style={{fontSize:"20px"}}/><span>Awaiting analysis</span></div>
+  if (loading)           return <div style={S.load}><Spin/><span>Building corpus connections…</span></div>
+  if (a3Status==="error") return <div style={S.err}>Agent 3: {a3Data?.error||"Failed"}</div>
+
+  const pieceLabel = id => { const p=PIECES.find(x=>x.id===id); return p ? `${p.composer.split(",")[0]} — ${p.title.split(" ").slice(0,3).join(" ")}` : id }
+  const simReady = simStatus==="done" && simData
+
+  // Top-level section header with group count + chevron
+  const SectionHeader = ({label, totalGroups, sectionKey, color}) => (
+    <div onClick={()=>tog(sectionKey)}
+      style={{display:"flex",alignItems:"center",gap:"6px",cursor:"pointer",marginTop:"8px",marginBottom:"3px",userSelect:"none"}}>
+      <span style={{fontSize:"11px",color:"#6b7280",fontWeight:"600",textTransform:"uppercase",letterSpacing:".04em"}}>{label}</span>
+      <span style={{fontSize:"10px",background:color+"22",color,padding:"1px 7px",borderRadius:"100px",fontWeight:"700"}}>{totalGroups}</span>
+      <i className={`ti ti-chevron-${open[sectionKey]?"up":"down"}`} style={{fontSize:"10px",color:"#9ca3af",marginLeft:"auto"}}/>
+    </div>
+  )
+
+  // Atom row: pill + piece count badge + 2nd-level chevron
+  const AtomRow = ({atomKey, label, pieceCount, color, bgColor, textColor, children}) => (
+    <div style={{marginBottom:"2px"}}>
+      <div onClick={()=>togAtom(atomKey)}
+        style={{display:"flex",alignItems:"center",gap:"5px",cursor:"pointer",padding:"2px 4px",borderRadius:"4px",
+                background:openAtom[atomKey]?"#f9fafb":"transparent",userSelect:"none"}}>
+        <span style={{background:bgColor,color:textColor,padding:"1px 7px",borderRadius:"4px",
+                      fontSize:"11px",fontWeight:"600",flexShrink:0}}>{label}</span>
+        <span style={{fontSize:"10px",background:"#f3f4f6",color:"#6b7280",padding:"1px 5px",
+                      borderRadius:"100px",fontWeight:"600",flexShrink:0}}>{pieceCount}</span>
+        <i className={`ti ti-chevron-${openAtom[atomKey]?"up":"down"}`}
+           style={{fontSize:"9px",color:"#9ca3af",marginLeft:"auto"}}/>
+      </div>
+      {openAtom[atomKey] && (
+        <div style={{paddingLeft:"12px",paddingTop:"2px",paddingBottom:"4px",
+                     borderLeft:"2px solid "+color+"33",marginLeft:"4px"}}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+
+  return (<div>
+    {a3Data?.cross_piece_tags?.length>0 && <>
+      <div style={S.sec}>Musical character</div>
+      <div style={{display:"flex",flexWrap:"wrap",marginBottom:"8px"}}>
+        {a3Data.cross_piece_tags.map((t,i)=><span key={i} style={S.pill}>{t}</span>)}
+      </div>
+    </>}
+
+    {simReady && <><div style={S.divider}/>
+      <div style={S.sec}>Corpus connections</div>
+
+      {simData.corpus_by_cadences?.length>0 && <>
+        <SectionHeader label="By cadence" totalGroups={simData.corpus_by_cadences.length} sectionKey="cad" color="#1d4ed8"/>
+        {open.cad && simData.corpus_by_cadences.map((g,i)=>(
+          <AtomRow key={i} atomKey={`cad_${i}`}
+            label={g.cadence_type}
+            pieceCount={g.pieces?.length||0}
+            color={CADS_COL[g.cadence_type]||"#6b7280"}
+            bgColor={(CADS_COL[g.cadence_type]||"#6b7280")+"22"}
+            textColor={CADS_COL[g.cadence_type]||"#6b7280"}>
+            {(g.pieces||[]).map((id,j)=>(
+              <div key={j} style={{fontSize:"11px",color:"#6b7280",padding:"1px 0",
+                                    display:"flex",alignItems:"center",gap:"4px"}}>
+                <span style={{width:"4px",height:"4px",borderRadius:"50%",background:"#d1d5db",flexShrink:0,display:"inline-block"}}/>
+                {pieceLabel(id)}
+              </div>
+            ))}
+          </AtomRow>
+        ))}
+      </>}
+
+      {simData.corpus_by_modulations?.length>0 && <>
+        <SectionHeader label="By modulation" totalGroups={simData.corpus_by_modulations.length} sectionKey="mod" color="#f97316"/>
+        {open.mod && simData.corpus_by_modulations.map((g,i)=>(
+          <AtomRow key={i} atomKey={`mod_${i}`}
+            label={g.modulation_type}
+            pieceCount={g.pieces?.length||0}
+            color="#f97316" bgColor="#fff7ed" textColor="#c2410c">
+            {(g.pieces||[]).map((id,j)=>(
+              <div key={j} style={{fontSize:"11px",color:"#6b7280",padding:"1px 0",
+                                    display:"flex",alignItems:"center",gap:"4px"}}>
+                <span style={{width:"4px",height:"4px",borderRadius:"50%",background:"#d1d5db",flexShrink:0,display:"inline-block"}}/>
+                {pieceLabel(id)}
+              </div>
+            ))}
+          </AtomRow>
+        ))}
+      </>}
+
+      {simData.corpus_by_tags?.length>0 && <>
+        <SectionHeader label="By characteristic" totalGroups={simData.corpus_by_tags.length} sectionKey="tag" color="#0369a1"/>
+        {open.tag && simData.corpus_by_tags.map((g,i)=>(
+          <AtomRow key={i} atomKey={`tag_${i}`}
+            label={g.tag}
+            pieceCount={g.pieces?.length||0}
+            color="#0369a1" bgColor="#f0f9ff" textColor="#0369a1">
+            {(g.pieces||[]).map((id,j)=>(
+              <div key={j} style={{fontSize:"11px",color:"#6b7280",padding:"1px 0",
+                                    display:"flex",alignItems:"center",gap:"4px"}}>
+                <span style={{width:"4px",height:"4px",borderRadius:"50%",background:"#d1d5db",flexShrink:0,display:"inline-block"}}/>
+                {pieceLabel(id)}
+              </div>
+            ))}
+          </AtomRow>
+        ))}
+      </>}
+
+      {/* Similarity scores — vertical, sorted by score */}
+      {simData.similarities?.length>0 && <>
+        <div style={S.divider}/>
+        <div style={S.sec}>Similarity scores</div>
+        {[...simData.similarities].sort((a,b)=>b.score-a.score).map(sim=>{
+          const p=PIECES.find(x=>x.id===sim.id); if(!p) return null
+          const ec=ERA_COL[p.era]||"#6b7280"
+          return (
+            <div key={sim.id} style={{marginBottom:"8px"}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:"6px",marginBottom:"2px"}}>
+                <span style={{fontSize:"11px",fontWeight:"500",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {p.composer.split(",")[0]} — {p.title.split(" ").slice(0,4).join(" ")}
+                </span>
+                <span style={{fontSize:"11px",fontWeight:"600",color:ec,flexShrink:0}}>{sim.score}%</span>
+              </div>
+              <div style={{height:"4px",background:"#f3f4f6",borderRadius:"3px",overflow:"hidden",marginBottom:"2px"}}>
+                <div style={{width:`${sim.score}%`,height:"100%",background:ec,borderRadius:"3px",transition:"width 1s ease"}}/>
+              </div>
+              {sim.reason&&<div style={{fontSize:"10px",color:"#9ca3af",lineHeight:"1.3"}}>{sim.reason}</div>}
+            </div>
+          )
+        })}
+      </>}
+    </>}
+  </div>)
+}
+
+function EvalPanel({status,data,error}){
+  if(status==="idle")    return <div style={S.idle}><i className="ti ti-school" style={{fontSize:"20px"}}/><span>Academic sources</span></div>
+  if(status==="loading") return <div style={S.load}><Spin/><span>Searching literature…</span></div>
+  if(status==="error")   return <div style={S.err}>{error||"Failed"}</div>
+  if(!data?.length)      return <div style={{fontSize:"13px",color:"#6b7280"}}>No sources found.</div>
+  const bg={academic:"#dbeafe",book:"#d1fae5",criticism:"#fef3c7"}
+  const tc={academic:"#1e3a8a",book:"#064e3b",criticism:"#78350f"}
+  return(<div>{data.map((src,i)=>(
+    <div key={i} style={{border:"1px solid #e5e7eb",borderRadius:"6px",padding:"9px 11px",marginBottom:"8px"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"6px",marginBottom:"3px"}}>
+        <p style={{fontSize:"12px",fontWeight:"500",lineHeight:"1.4"}}>{src.title}</p>
+        <span style={{fontSize:"10px",padding:"1px 6px",borderRadius:"100px",fontWeight:"500",flexShrink:0,background:bg[src.type]||"#f3f4f6",color:tc[src.type]||"#374151"}}>{src.type}</span>
+      </div>
+      <p style={{fontSize:"11px",color:"#6b7280",marginBottom:"3px"}}>{src.author}{src.year?` · ${src.year}`:""} · <em>{src.publication}</em></p>
+      {src.description&&<p style={{fontSize:"11px",color:"#6b7280",lineHeight:"1.45",marginBottom:"5px"}}>{src.description}</p>}
+      <a href={`https://scholar.google.com/scholar?q=${encodeURIComponent((src.title||"")+" "+(src.author||""))}`} target="_blank" rel="noopener noreferrer" style={{fontSize:"11px",color:"#6b7280",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:"3px"}}><i className="ti ti-search" style={{fontSize:"11px"}}/> Search Google Scholar</a>
+    </div>
+  ))}</div>)
+}
+
+function SimPanel({status,data,error}){
+  if(status==="idle")    return <div style={{...S.idle,height:"70px"}}><i className="ti ti-arrows-diff" style={{fontSize:"20px"}}/><span>Awaiting analysis</span></div>
+  if(status==="loading") return <div style={S.load}><Spin/><span>Computing similarity…</span></div>
+  if(status==="error")   return <div style={S.err}>{error||"Failed"}</div>
+  const arr2=Array.isArray(data)?data:(data?.similarities||[])
+  if(!arr2?.length) return null
+  const arr=Array.isArray(data)?data:(data?.similarities||[])
+  const sorted=[...arr].sort((a,b)=>b.score-a.score)
+  return(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 20px"}}>
+    {(sorted.length?sorted:arr2).map(sim=>{
+      const p=PIECES.find(x=>x.id===sim.id); if(!p) return null
+      const ec=ERA_COL[p.era]||"#6b7280"
+      return(<div key={sim.id} style={{minWidth:0}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:"6px",marginBottom:"2px"}}>
+          <span style={{fontSize:"11px",fontWeight:"500",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.composer.split(",")[0]} — {p.title.split(" ").slice(0,4).join(" ")}</span>
+          <span style={{fontSize:"11px",fontWeight:"600",color:ec,flexShrink:0}}>{sim.score}%</span>
+        </div>
+        <div style={{height:"5px",background:"#f3f4f6",borderRadius:"3px",overflow:"hidden",marginBottom:"2px"}}>
+          <div style={{width:`${sim.score}%`,height:"100%",background:ec,borderRadius:"3px",transition:"width 1s ease"}}/>
+        </div>
+        {sim.reason&&<div style={{fontSize:"10px",color:"#9ca3af",lineHeight:"1.3"}}>{sim.reason}</div>}
+      </div>)
+    })}
+  </div>)
+}
+
+function SoulPanel({status, data, error, simData, piece}) {
+  const mobile = useMobile()
+  const [tab, setTab] = useState(0)
+
+  if (status==="idle") return (
+    <div style={{...S.idle, height:"80px"}}>
+      <i className="ti ti-sparkles" style={{fontSize:"20px"}}/>
+      <span>Musical soul — run analysis to reveal</span>
+    </div>
+  )
+  if (status==="loading") return (
+    <div style={S.load}>
+      <Spin/>
+      <span>Writing musical portrait…</span>
+    </div>
+  )
+  if (status==="error") return <div style={S.err}>{error||"Failed"}</div>
+  if (!data) return null
+
+  const topSim = simData?.similarities
+    ? [...simData.similarities].sort((a,b)=>b.score-a.score)[0]
+    : null
+  const topPiece = topSim ? PIECES.find(p=>p.id===topSim.id) : null
+
+  const blocks = [
+    {label:"Harmonic Signature", icon:"fingerprint", accent:"#3b82f6", text:data.signature},
+    {label:"Why It Matters",     icon:"ear",         accent:"#10b981", text:data.significance},
+    {label: topPiece
+        ? `Connection · ${topPiece.composer.split(",")[0]} — ${topPiece.title.split(" ").slice(0,3).join(" ")}`
+        : "Connection",
+     icon:"arrows-exchange", accent:"#8b5cf6", text:data.connection},
+  ]
+
+  const Block = ({label, icon, text, accent}) => (
+    <div style={{flex:1, minWidth:0}}>
+      <div style={{display:"flex", alignItems:"center", gap:"5px", marginBottom:"5px"}}>
+        <i className={`ti ti-${icon}`} style={{fontSize:"12px", color:accent}}/>
+        <span style={{fontSize:"10px", fontWeight:"600", color:accent,
+                      textTransform:"uppercase", letterSpacing:".07em"}}>{label}</span>
+      </div>
+      <p style={{fontSize:"12.5px", lineHeight:"1.65", color:"#1f2937", margin:0}}>{text}</p>
+    </div>
+  )
+
+  if (mobile) {
+    const TAB_LABELS = ["Signature", "Why It Matters", "Connection"]
+    return (
+      <div>
+        {/* Text tabs */}
+        <div style={{display:"flex", borderBottom:"1px solid #e5e7eb", marginBottom:"12px", gap:"0"}}>
+          {TAB_LABELS.map((label, i) => (
+            <button key={i} onClick={()=>setTab(i)}
+              style={{flex:1, padding:"6px 4px", fontSize:"11px", fontWeight: tab===i?"600":"400",
+                      color: tab===i ? blocks[i].accent : "#9ca3af",
+                      background:"none", border:"none", borderBottom: tab===i ? `2px solid ${blocks[i].accent}` : "2px solid transparent",
+                      cursor:"pointer", marginBottom:"-1px"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <Block {...blocks[tab]}/>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{display:"flex", gap:"20px", flexWrap:"wrap"}}>
+      <Block {...blocks[0]}/>
+      <div style={{width:"1px", background:"#e5e7eb", flexShrink:0, alignSelf:"stretch"}}/>
+      <Block {...blocks[1]}/>
+      <div style={{width:"1px", background:"#e5e7eb", flexShrink:0, alignSelf:"stretch"}}/>
+      <Block {...blocks[2]}/>
+    </div>
+  )
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+function Clavier() {
+  const mobile = useMobile()
+  const [selId,    setSelId]    = useState("wtc1f19")
+  const [phase,    setPhase]    = useState("idle")
+  const [scoreMsg,    setScoreMsg]    = useState("")   // status message for score panel
+  const [overlayMode, setOverlayMode] = useState("keys") // keys | sections | themes
+  const [pages,    setPages]    = useState([])   // SVG strings from Python Verovio
+  const [kern,     setKern]     = useState("")   // full kern text for Agent 2
+  const [a2,   setA2]   = useState({status:"idle",data:null,error:null})
+  const [a3,   setA3]   = useState({status:"idle",data:null,error:null})
+  const [ev,   setEv]   = useState({status:"idle",data:null,error:null})
+  const [sim,  setSim]  = useState({status:"idle",data:null,error:null})
+  const [soul, setSoul] = useState({status:"idle",data:null,error:null})
+  const containerRef = useRef(null)
+  const piece = PIECES.find(p=>p.id===selId)||PIECES[0]
+
+  const soulRef = useRef(null)
+
+  // Spinner + bounce keyframes
+  useEffect(()=>{
+    const s=document.createElement("style")
+    s.textContent=`
+      @keyframes spin{to{transform:rotate(360deg)}}
+      @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+    `
+    document.head.appendChild(s)
+  },[])
+
+  // Load score pages from Python Verovio server + kern text when piece changes
+  useEffect(()=>{
+    setPages([]); setKern(""); setScoreMsg("Loading score…")
+    // Load kern text (for Agent 2 analysis)
+    fetch(`${API_BASE}/kern/${selId}`)
+      .then(r=>r.ok ? r.text() : Promise.reject(`kern HTTP ${r.status}`))
+      .then(text=>{ setKern(text); console.log(`[kern] ${text.split("\n").length} lines`) })
+      .catch(e=>console.error("[kern]", e))
+    // Load rendered SVG pages (Python Verovio on server, kern → SVG)
+    loadScorePages(selId, setScoreMsg)
+      .then(svgs=>{ setPages(svgs); setScoreMsg("") })
+      .catch(e=>{ console.error("[score]", e); setScoreMsg("❌ " + e.message) })
+  },[selId])
+
+  // Apply overlays: 800ms when analysis/pages arrive, 50ms on mode toggle
+  useEffect(()=>{
+    if (!a2.data || !pages.length || !containerRef.current) return
+    const t=setTimeout(()=>applyOverlay(containerRef.current, a2.data, overlayMode, mobile), 800)
+    return ()=>clearTimeout(t)
+  },[a2.data, pages])
+  useEffect(()=>{
+    if (!a2.data || !pages.length || !containerRef.current) return
+    const t=setTimeout(()=>applyOverlay(containerRef.current, a2.data, overlayMode, mobile), 50)
+    return ()=>clearTimeout(t)
+  },[overlayMode])
+
+  const reset = id => {
+    setSelId(id)
+    setA2({status:"idle",data:null,error:null}); setA3({status:"idle",data:null,error:null})
+    setEv({status:"idle",data:null,error:null}); setSim({status:"idle",data:null,error:null})
+    setSoul({status:"idle",data:null,error:null})
+    setPhase("idle")
+  }
+
+  const analyze = async () => {
+    if (!kern) { setScoreMsg("Kern not loaded yet — wait a moment"); return }
+    setPhase("running")
+    setA2({status:"loading",data:null,error:null}); setA3({status:"idle",data:null,error:null})
+    setEv({status:"loading",data:null,error:null}); setSim({status:"idle",data:null,error:null})
+    containerRef.current?.querySelectorAll("[data-sm]").forEach(el=>el.remove())
+
+    const [r2, rEv] = await Promise.allSettled([callA2(kern), callEval(piece)])
+    const a2data = r2.status==="fulfilled" ? r2.value : null
+    setA2({status:a2data?"done":"error", data:a2data, error:r2.status==="rejected"?r2.reason?.message:null})
+    setEv({status:rEv.status==="fulfilled"?"done":"error", data:rEv.status==="fulfilled"?rEv.value:null, error:rEv.status==="rejected"?rEv.reason?.message:null})
+
+    if (a2data) {
+      setA3({status:"loading",data:null,error:null}); setSim({status:"loading",data:null,error:null})
+      setSoul({status:"loading",data:null,error:null})
+      const [r3, rSim] = await Promise.allSettled([callA3(a2data), callSim(a2data,piece)])
+      setA3({status:r3.status==="fulfilled"?"done":"error", data:r3.status==="fulfilled"?r3.value:null, error:r3.status==="rejected"?r3.reason?.message:null})
+      const simData = rSim.status==="fulfilled" ? rSim.value : null
+      setSim({status:simData?"done":"error", data:simData, error:rSim.status==="rejected"?rSim.reason?.message:null})
+
+      // Soul runs after Sim so it knows the top similarity match
+      if (simData?.similarities?.length) {
+        const topSim = [...simData.similarities].sort((a,b)=>b.score-a.score)[0]
+        try {
+          const rSoul = await callSoul(a2data, piece, topSim)
+          setSoul({status:"done", data:rSoul, error:null})
+        } catch(e) {
+          setSoul({status:"error", data:null, error:e?.message||"Soul agent failed"})
+        }
+      } else {
+        setSoul({status:"error", data:null, error:"No similarity data"})
+      }
+    }
+    setPhase("done")
+  }
+
+  const running = phase==="running"
+
+  return (
+    <div style={{maxWidth:"1100px",margin:"0 auto",padding:"1rem"}}>
+
+      {/* Back to top — fixed, always visible */}
+      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+        title="Back to top"
+        style={{position:"fixed", bottom:"20px", right:"20px", zIndex:999,
+                width:"38px", height:"38px", borderRadius:"50%",
+                background:"#1f2937", border:"none", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                boxShadow:"0 2px 8px rgba(0,0,0,0.25)", opacity:"0.85"}}>
+        <i className="ti ti-arrow-up" style={{fontSize:"16px", color:"#fff"}}/>
+      </button>
+
+      {/* Header */}
+      <div style={{display:"flex",flexDirection: mobile?"column":"row",alignItems:mobile?"stretch":"center",justifyContent:"space-between",paddingBottom:"1rem",borderBottom:"1px solid #e5e7eb",marginBottom:"1.25rem",gap:mobile?"10px":"0"}}>
+        <div>
+          <div style={{fontSize:"16px",fontWeight:"600",display:"flex",alignItems:"center",gap:"8px"}}>
+            <i className="ti ti-piano"/>Clavier
+            <span style={{fontSize:"11px",fontWeight:"400",background:"#f3f4f6",padding:"1px 8px",borderRadius:"100px",border:"1px solid #e5e7eb",color:"#6b7280"}}>Local · Verovio WASM</span>
+          </div>
+          <div style={{fontSize:"12px",color:"#9ca3af",marginTop:"2px",fontStyle:"italic"}}>Every piano piece, understood.</div>
+        </div>
+        <div style={{display:"flex",flexDirection:mobile?"column":"row",alignItems:mobile?"stretch":"center",gap:"8px"}}>
+          <select value={selId} onChange={e=>reset(e.target.value)} disabled={running}
+            style={{fontSize:"13px",width:mobile?"100%":"auto",maxWidth:mobile?"100%":"340px",padding:"5px 8px",border:"1px solid #e5e7eb",borderRadius:"6px"}}>
+            {PIECES.map(p=><option key={p.id} value={p.id}>{p.composer} — {p.title} ({p.opus})</option>)}
+          </select>
+          <button onClick={analyze} disabled={running||!kern}
+            style={{padding:"7px 16px",background:"#fff",border:"1px solid #d1d5db",borderRadius:"6px",fontSize:"13px",cursor:(running||!kern)?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"6px",opacity:(running)?.5:1,width:mobile?"100%":"auto"}}>
+            {running?<Spin/>:<i className="ti ti-player-play" style={{fontSize:"13px"}}/>}
+            {running?"Analyzing…":"Analyze"}
+          </button>
+        </div>
+      </div>
+
+      {/* Score loading status */}
+      {scoreMsg&&(
+        <div style={{padding:"8px 12px",background:scoreMsg.startsWith("❌")?"#fee2e2":"#f0fdf4",borderRadius:"6px",fontSize:"12px",color:scoreMsg.startsWith("❌")?"#991b1b":"#166534",marginBottom:"1rem",whiteSpace:"pre-wrap",fontFamily:scoreMsg.startsWith("❌")?"var(--font,monospace)":undefined}}>
+          {scoreMsg}
+        </div>
+      )}
+
+      {/* Score panel */}
+      <div style={{fontSize:"11px",fontWeight:"500",color:"#9ca3af",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px"}}>
+        Score · {piece.era} · {piece.key} · {piece.sig}
+        {pages.length>0&&` · ${pages.length} page${pages.length>1?"s":""} · Python Verovio · full kern`}
+      </div>
+      <div style={{border:"1px solid #e5e7eb",borderRadius:"10px",overflow:"hidden",marginBottom:"1rem",position:"relative"}}>
+        <div style={{padding:"8px 14px",borderBottom:"1px solid #e5e7eb",background:"#f9fafb",
+                     display:"flex",flexDirection:"column",gap:"6px"}}>
+          {/* Title row */}
+          <div style={{display:"flex",alignItems:"center",gap:"8px",minWidth:0}}>
+            <i className="ti ti-music" style={{fontSize:"14px",color:"#6b7280",flexShrink:0}}/>
+            <span style={{fontSize:"13px",fontWeight:"500",
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>
+              {piece.composer.split(",")[0]} — {piece.title}
+            </span>
+            <span style={{fontSize:"11px",color:"#9ca3af",flexShrink:0}}>{piece.opus}</span>
+          </div>
+          {/* Toggle buttons row */}
+          <div style={{display:"flex",alignItems:"center",gap:"4px",flexWrap:"wrap"}}>
+            {["keys","cadences","sections","themes"].map(m=>(
+              <button key={m} onClick={()=>setOverlayMode(m)}
+                style={{padding:"2px 9px",fontSize:"10px",borderRadius:"100px",cursor:"pointer",fontWeight:"500",
+                        border:"1px solid "+(overlayMode===m?"#3b82f6":"#e5e7eb"),
+                        background:overlayMode===m?"#eff6ff":"transparent",
+                        color:overlayMode===m?"#1d4ed8":"#9ca3af"}}>
+                {m.charAt(0).toUpperCase()+m.slice(1)}
+              </button>
+            ))}
+            <span onClick={()=>soulRef.current?.scrollIntoView({behavior:"smooth"})}
+              style={{marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:"3px",
+                      fontSize:"10px",color:"#9ca3af",cursor:"pointer",
+                      userSelect:"none",WebkitUserSelect:"none",flexShrink:0}}>
+              Jump to analysis
+              <i className="ti ti-chevron-down" style={{fontSize:"11px",animation:"bounce 1.2s ease-in-out infinite"}}/>
+            </span>
+          </div>
+        </div>
+        <div ref={containerRef} style={{overflowY:"auto",maxHeight:"65vh",background:"#f3f4f6",padding:"12px 16px"}}>
+          {pages.length===0
+            ? <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"120px",color:"#9ca3af",fontSize:"13px"}}>
+                {scoreMsg || "Loading score from Python Verovio…"}
+              </div>
+            : pages.map((svg,i)=>(
+                <div key={i} className="score-page"
+                  style={{marginBottom:i<pages.length-1?"12px":"0"}}
+                  dangerouslySetInnerHTML={{__html:svg}}/>
+              ))
+          }
+        </div>
+        {/* Gradient jump bar — bottom of score, both desktop and mobile */}
+        <div onClick={()=>soulRef.current?.scrollIntoView({behavior:"smooth"})}
+          style={{position:"absolute",bottom:0,left:0,right:0,height:"56px",zIndex:10,
+                  background:"linear-gradient(to bottom, transparent, rgba(243,244,246,0.97))",
+                  display:"flex",alignItems:"flex-end",justifyContent:"center",
+                  paddingBottom:"10px",cursor:"pointer",userSelect:"none",
+                  WebkitUserSelect:"none",pointerEvents:"auto"}}>
+          <span style={{fontSize:"11px",color:"#6b7280",marginRight:"5px",fontWeight:"500",
+                        letterSpacing:".04em"}}>Jump to analysis</span>
+          <i className="ti ti-chevron-down"
+            style={{fontSize:"13px",color:"#6b7280",animation:"bounce 1.2s ease-in-out infinite"}}/>
+        </div>
+      </div>
+
+      {/* Overlay timeline */}
+      {a2.data&&(
+        <div style={{marginBottom:"1rem"}}>
+          <div style={{fontSize:"11px",fontWeight:"500",color:"#9ca3af",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",display:"flex",alignItems:"center",gap:"14px"}}>
+            Analysis overlay
+            {[["Form","#3b82f6",true],["Key areas","#10b981",true],["Cadences","#1d4ed8",false]].map(([l,c,r])=>(
+              <span key={l} style={{display:"inline-flex",alignItems:"center",gap:"4px",fontWeight:"400"}}>
+                {r?<span style={{width:"10px",height:"10px",background:c,borderRadius:"2px",opacity:.6,display:"inline-block"}}/>
+                  :<span style={{width:"10px",height:"10px",background:c,borderRadius:"50%",opacity:.75,display:"inline-block"}}/>}
+                {l}
+              </span>
+            ))}
+          </div>
+          <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"12px 16px",
+                       overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+            <Timeline a2={a2.data}/>
+          </div>
+        </div>
+      )}
+
+      {/* Soul panel — full width, above the grid */}
+      <div ref={soulRef} style={S.card}>
+        <div style={S.chdr}>
+          <span style={{fontSize:"12px",fontWeight:"500",color:"#6b7280",textTransform:"uppercase",letterSpacing:".05em"}}>
+            Musical Soul
+          </span>
+          <span style={badge("#ede9fe","#5b21b6")}>Soul · sonnet-4</span>
+        </div>
+        <SoulPanel status={soul.status} data={soul.data} error={soul.error} simData={sim.data} piece={piece}/>
+      </div>
+
+      {/* Analysis panels — horizontal scroll on desktop, single column on mobile */}
+      {mobile ? (
+        <div style={{display:"flex", flexDirection:"column", gap:"12px"}}>
+          <div style={S.card}><div style={S.chdr}><span style={{fontSize:"12px",fontWeight:"500",color:"#6b7280",textTransform:"uppercase",letterSpacing:".05em"}}>Harmonic analysis</span><span style={badge("#dbeafe","#1e40af")}>Agent 2 · sonnet-4</span></div><A2Panel status={a2.status} data={a2.data} error={a2.error}/></div>
+          <div style={S.card}><div style={S.chdr}><span style={{fontSize:"12px",fontWeight:"500",color:"#6b7280",textTransform:"uppercase",letterSpacing:".05em"}}>Corpus Similarity</span><span style={badge("#d1fae5","#065f46")}>Agent 3 + sim</span></div><CorpusSimilarityPanel a3Status={a3.status} a3Data={a3.data} simStatus={sim.status} simData={sim.data}/></div>
+          <div style={S.card}><div style={S.chdr}><span style={{fontSize:"12px",fontWeight:"500",color:"#6b7280",textTransform:"uppercase",letterSpacing:".05em"}}>Authoritative sources</span><span style={badge("#ede9fe","#4c1d95")}>Eval · web search</span></div><EvalPanel status={ev.status} data={ev.data} error={ev.error}/></div>
+        </div>
+      ) : (
+        <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",marginBottom:"12px",paddingBottom:"6px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(300px,1fr))",gap:"12px",minWidth:"780px"}}>
+            <div style={S.card}><div style={S.chdr}><span style={{fontSize:"12px",fontWeight:"500",color:"#6b7280",textTransform:"uppercase",letterSpacing:".05em"}}>Harmonic analysis</span><span style={badge("#dbeafe","#1e40af")}>Agent 2 · sonnet-4</span></div><A2Panel status={a2.status} data={a2.data} error={a2.error}/></div>
+            <div style={S.card}><div style={S.chdr}><span style={{fontSize:"12px",fontWeight:"500",color:"#6b7280",textTransform:"uppercase",letterSpacing:".05em"}}>Corpus Similarity</span><span style={badge("#d1fae5","#065f46")}>Agent 3 + sim</span></div><CorpusSimilarityPanel a3Status={a3.status} a3Data={a3.data} simStatus={sim.status} simData={sim.data}/></div>
+            <div style={S.card}><div style={S.chdr}><span style={{fontSize:"12px",fontWeight:"500",color:"#6b7280",textTransform:"uppercase",letterSpacing:".05em"}}>Authoritative sources</span><span style={badge("#ede9fe","#4c1d95")}>Eval · web search</span></div><EvalPanel status={ev.status} data={ev.data} error={ev.error}/></div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"))
+root.render(React.createElement(Clavier))
+</script>
+</body>
+</html>

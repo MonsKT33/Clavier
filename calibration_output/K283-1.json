@@ -1,0 +1,925 @@
+{
+  "piece": "K283-1",
+  "scores": {
+    "key": {
+      "score": 1.0,
+      "match": true,
+      "agent2": "G major",
+      "dcml": "G major"
+    },
+    "cadences": {
+      "precision": 0.562,
+      "recall": 0.529,
+      "f1": 0.545,
+      "tp": 9,
+      "fp": 7,
+      "fn": 8
+    },
+    "chord_labels": {
+      "cadence_coverage": 0.882,
+      "cadence_root_match": 0.733,
+      "n_cadence_bars": 17
+    }
+  },
+  "disagreements": [
+    {
+      "dimension": "cadence_missed",
+      "bar": 10,
+      "agent2": null,
+      "dcml": "PAC",
+      "severity": "high",
+      "evidence": "DCML has PAC at m.10; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_missed",
+      "bar": 26,
+      "agent2": null,
+      "dcml": "HC",
+      "severity": "high",
+      "evidence": "DCML has HC at m.26; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_missed",
+      "bar": 38,
+      "agent2": null,
+      "dcml": "PAC",
+      "severity": "high",
+      "evidence": "DCML has PAC at m.38; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_missed",
+      "bar": 48,
+      "agent2": null,
+      "dcml": "EC",
+      "severity": "high",
+      "evidence": "DCML has EC at m.48; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_missed",
+      "bar": 51,
+      "agent2": null,
+      "dcml": "PAC",
+      "severity": "high",
+      "evidence": "DCML has PAC at m.51; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_missed",
+      "bar": 93,
+      "agent2": null,
+      "dcml": "HC",
+      "severity": "high",
+      "evidence": "DCML has HC at m.93; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_missed",
+      "bar": 105,
+      "agent2": null,
+      "dcml": "PAC",
+      "severity": "high",
+      "evidence": "DCML has PAC at m.105; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_missed",
+      "bar": 115,
+      "agent2": null,
+      "dcml": "EC",
+      "severity": "high",
+      "evidence": "DCML has EC at m.115; Agent 2 has nothing within \u00b11 bars"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 22,
+      "agent2": "PAC",
+      "dcml": "HC",
+      "severity": "medium",
+      "evidence": "DCML labels m.22 as HC; Agent 2 says PAC at m.22"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 30,
+      "agent2": "PAC",
+      "dcml": "HC",
+      "severity": "medium",
+      "evidence": "DCML labels m.30 as HC; Agent 2 says PAC at m.30"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 43,
+      "agent2": "IAC",
+      "dcml": "PAC",
+      "severity": "medium",
+      "evidence": "DCML labels m.43 as PAC; Agent 2 says IAC at m.43"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 62,
+      "agent2": "HC",
+      "dcml": "PAC",
+      "severity": "medium",
+      "evidence": "DCML labels m.62 as PAC; Agent 2 says HC at m.62"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 89,
+      "agent2": "PAC",
+      "dcml": "HC",
+      "severity": "medium",
+      "evidence": "DCML labels m.89 as HC; Agent 2 says PAC at m.89"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 97,
+      "agent2": "PAC",
+      "dcml": "HC",
+      "severity": "medium",
+      "evidence": "DCML labels m.97 as HC; Agent 2 says PAC at m.97"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 110,
+      "agent2": "IAC",
+      "dcml": "PAC",
+      "severity": "medium",
+      "evidence": "DCML labels m.110 as PAC; Agent 2 says IAC at m.111"
+    },
+    {
+      "dimension": "cadence_type",
+      "bar": 118,
+      "agent2": "HC",
+      "dcml": "PAC",
+      "severity": "medium",
+      "evidence": "DCML labels m.118 as PAC; Agent 2 says HC at m.117"
+    },
+    {
+      "dimension": "chord_at_cadence_missing",
+      "bar": 93,
+      "agent2": null,
+      "dcml": "V",
+      "severity": "medium",
+      "evidence": "m.93: Agent 2 has no chord label within \u00b11 bars of DCML cadence (V)"
+    },
+    {
+      "dimension": "chord_at_cadence_missing",
+      "bar": 115,
+      "agent2": null,
+      "dcml": "I",
+      "severity": "medium",
+      "evidence": "m.115: Agent 2 has no chord label within \u00b11 bars of DCML cadence (I)"
+    },
+    {
+      "dimension": "cadence_extra",
+      "bar": 4,
+      "agent2": "HC",
+      "dcml": null,
+      "severity": "low",
+      "evidence": "Agent 2 adds HC at m.4; DCML has no cadence nearby"
+    },
+    {
+      "dimension": "cadence_extra",
+      "bar": 8,
+      "agent2": "PAC",
+      "dcml": null,
+      "severity": "low",
+      "evidence": "Agent 2 adds PAC at m.8; DCML has no cadence nearby"
+    },
+    {
+      "dimension": "cadence_extra",
+      "bar": 53,
+      "agent2": "PAC",
+      "dcml": null,
+      "severity": "low",
+      "evidence": "Agent 2 adds PAC at m.53; DCML has no cadence nearby"
+    },
+    {
+      "dimension": "cadence_extra",
+      "bar": 71,
+      "agent2": "HC",
+      "dcml": null,
+      "severity": "low",
+      "evidence": "Agent 2 adds HC at m.71; DCML has no cadence nearby"
+    },
+    {
+      "dimension": "cadence_extra",
+      "bar": 74,
+      "agent2": "HC",
+      "dcml": null,
+      "severity": "low",
+      "evidence": "Agent 2 adds HC at m.74; DCML has no cadence nearby"
+    },
+    {
+      "dimension": "cadence_extra",
+      "bar": 82,
+      "agent2": "PAC",
+      "dcml": null,
+      "severity": "low",
+      "evidence": "Agent 2 adds PAC at m.82; DCML has no cadence nearby"
+    },
+    {
+      "dimension": "cadence_extra",
+      "bar": 120,
+      "agent2": "PAC",
+      "dcml": null,
+      "severity": "low",
+      "evidence": "Agent 2 adds PAC at m.120; DCML has no cadence nearby"
+    },
+    {
+      "dimension": "chord_at_cadence_root_mismatch",
+      "bar": 38,
+      "agent2": [
+        "V",
+        "V7/vi"
+      ],
+      "dcml": "I",
+      "severity": "low",
+      "evidence": "m.38: DCML cadence chord=I (root I), Agent 2 nearby=['V', 'V7/vi'] (roots ['V', 'V'])"
+    },
+    {
+      "dimension": "chord_at_cadence_root_mismatch",
+      "bar": 62,
+      "agent2": [
+        "V"
+      ],
+      "dcml": "I",
+      "severity": "low",
+      "evidence": "m.62: DCML cadence chord=I (root I), Agent 2 nearby=['V'] (roots ['V'])"
+    },
+    {
+      "dimension": "chord_at_cadence_root_mismatch",
+      "bar": 97,
+      "agent2": [
+        "I",
+        "I"
+      ],
+      "dcml": "V",
+      "severity": "low",
+      "evidence": "m.97: DCML cadence chord=V (root V), Agent 2 nearby=['I', 'I'] (roots ['I', 'I'])"
+    },
+    {
+      "dimension": "chord_at_cadence_root_mismatch",
+      "bar": 105,
+      "agent2": [
+        "V",
+        "V7/ii"
+      ],
+      "dcml": "I",
+      "severity": "low",
+      "evidence": "m.105: DCML cadence chord=I (root I), Agent 2 nearby=['V', 'V7/ii'] (roots ['V', 'V'])"
+    }
+  ],
+  "agent2_raw": {
+    "key": "G major",
+    "time_signature": "3/4",
+    "total_bars": 120,
+    "formal_sections": [
+      {
+        "label": "Exposition (A)",
+        "bar_start": 1,
+        "bar_end": 53
+      },
+      {
+        "label": "Development (B)",
+        "bar_start": 54,
+        "bar_end": 71
+      },
+      {
+        "label": "Recapitulation (A)",
+        "bar_start": 72,
+        "bar_end": 120
+      }
+    ],
+    "key_regions": [
+      {
+        "key": "G major",
+        "bar_start": 1,
+        "bar_end": 22
+      },
+      {
+        "key": "D major",
+        "bar_start": 23,
+        "bar_end": 53
+      },
+      {
+        "key": "D major / unstable",
+        "bar_start": 54,
+        "bar_end": 71
+      },
+      {
+        "key": "G major",
+        "bar_start": 72,
+        "bar_end": 74
+      },
+      {
+        "key": "E minor",
+        "bar_start": 75,
+        "bar_end": 82
+      },
+      {
+        "key": "G major",
+        "bar_start": 83,
+        "bar_end": 120
+      }
+    ],
+    "modulations": [
+      {
+        "bar": 23,
+        "from_key": "G major",
+        "to_key": "D major",
+        "type": "diatonic",
+        "pivot_chord": "V of D / II of G"
+      },
+      {
+        "bar": 54,
+        "from_key": "D major",
+        "to_key": "D minor / chromatic",
+        "type": "modal_mixture",
+        "pivot_chord": null
+      },
+      {
+        "bar": 62,
+        "from_key": "unstable",
+        "to_key": "G major",
+        "type": "diatonic",
+        "pivot_chord": null
+      },
+      {
+        "bar": 75,
+        "from_key": "G major",
+        "to_key": "E minor",
+        "type": "diatonic",
+        "pivot_chord": "I6 of G / III of e"
+      },
+      {
+        "bar": 83,
+        "from_key": "E minor",
+        "to_key": "G major",
+        "type": "diatonic",
+        "pivot_chord": null
+      }
+    ],
+    "cadences": [
+      {
+        "bar": 4,
+        "beat": 3,
+        "type": "HC",
+        "key": "G major"
+      },
+      {
+        "bar": 8,
+        "beat": 1,
+        "type": "PAC",
+        "key": "G major"
+      },
+      {
+        "bar": 16,
+        "beat": 1,
+        "type": "PAC",
+        "key": "G major"
+      },
+      {
+        "bar": 22,
+        "beat": 1,
+        "type": "PAC",
+        "key": "G major"
+      },
+      {
+        "bar": 30,
+        "beat": 1,
+        "type": "PAC",
+        "key": "D major"
+      },
+      {
+        "bar": 43,
+        "beat": 1,
+        "type": "IAC",
+        "key": "D major"
+      },
+      {
+        "bar": 44,
+        "beat": 1,
+        "type": "IAC",
+        "key": "D major"
+      },
+      {
+        "bar": 53,
+        "beat": 1,
+        "type": "PAC",
+        "key": "D major"
+      },
+      {
+        "bar": 62,
+        "beat": 1,
+        "type": "HC",
+        "key": "G major"
+      },
+      {
+        "bar": 71,
+        "beat": 3,
+        "type": "HC",
+        "key": "G major"
+      },
+      {
+        "bar": 74,
+        "beat": 1,
+        "type": "HC",
+        "key": "G major"
+      },
+      {
+        "bar": 82,
+        "beat": 1,
+        "type": "PAC",
+        "key": "E minor"
+      },
+      {
+        "bar": 89,
+        "beat": 1,
+        "type": "PAC",
+        "key": "G major"
+      },
+      {
+        "bar": 97,
+        "beat": 1,
+        "type": "PAC",
+        "key": "G major"
+      },
+      {
+        "bar": 111,
+        "beat": 1,
+        "type": "IAC",
+        "key": "G major"
+      },
+      {
+        "bar": 117,
+        "beat": 1,
+        "type": "HC",
+        "key": "G major"
+      },
+      {
+        "bar": 120,
+        "beat": 1,
+        "type": "PAC",
+        "key": "G major"
+      }
+    ],
+    "chord_labels": [
+      {
+        "bar": 1,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 2,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 3,
+        "beat": 1,
+        "roman_numeral": "ii"
+      },
+      {
+        "bar": 4,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 5,
+        "beat": 1,
+        "roman_numeral": "IV"
+      },
+      {
+        "bar": 6,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 7,
+        "beat": 1,
+        "roman_numeral": "V7/IV"
+      },
+      {
+        "bar": 8,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 9,
+        "beat": 2,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 10,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 13,
+        "beat": 1,
+        "roman_numeral": "V7/IV"
+      },
+      {
+        "bar": 14,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 16,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 17,
+        "beat": 1,
+        "roman_numeral": "IV"
+      },
+      {
+        "bar": 18,
+        "beat": 1,
+        "roman_numeral": "V/V"
+      },
+      {
+        "bar": 19,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 21,
+        "beat": 3,
+        "roman_numeral": "V7/V"
+      },
+      {
+        "bar": 22,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 23,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 24,
+        "beat": 1,
+        "roman_numeral": "IV"
+      },
+      {
+        "bar": 25,
+        "beat": 1,
+        "roman_numeral": "vii\u00b07/V"
+      },
+      {
+        "bar": 26,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 27,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 29,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 30,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 31,
+        "beat": 3,
+        "roman_numeral": "V7"
+      },
+      {
+        "bar": 32,
+        "beat": 3,
+        "roman_numeral": "V7"
+      },
+      {
+        "bar": 33,
+        "beat": 3,
+        "roman_numeral": "V7/vi"
+      },
+      {
+        "bar": 34,
+        "beat": 1,
+        "roman_numeral": "bVII"
+      },
+      {
+        "bar": 35,
+        "beat": 1,
+        "roman_numeral": "V7/V"
+      },
+      {
+        "bar": 36,
+        "beat": 1,
+        "roman_numeral": "V7"
+      },
+      {
+        "bar": 37,
+        "beat": 2,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 38,
+        "beat": 3,
+        "roman_numeral": "V7/vi"
+      },
+      {
+        "bar": 43,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 44,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 45,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 46,
+        "beat": 1,
+        "roman_numeral": "ii"
+      },
+      {
+        "bar": 47,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 48,
+        "beat": 1,
+        "roman_numeral": "V7"
+      },
+      {
+        "bar": 50,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 51,
+        "beat": 1,
+        "roman_numeral": "V7"
+      },
+      {
+        "bar": 53,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 54,
+        "beat": 1,
+        "roman_numeral": "i"
+      },
+      {
+        "bar": 58,
+        "beat": 2,
+        "roman_numeral": "V/III"
+      },
+      {
+        "bar": 59,
+        "beat": 1,
+        "roman_numeral": "III"
+      },
+      {
+        "bar": 62,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 66,
+        "beat": 1,
+        "roman_numeral": "IV"
+      },
+      {
+        "bar": 68,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 70,
+        "beat": 1,
+        "roman_numeral": "IV"
+      },
+      {
+        "bar": 71,
+        "beat": 3,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 72,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 73,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 74,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 75,
+        "beat": 3,
+        "roman_numeral": "V/vi"
+      },
+      {
+        "bar": 76,
+        "beat": 1,
+        "roman_numeral": "vi"
+      },
+      {
+        "bar": 78,
+        "beat": 1,
+        "roman_numeral": "V/vi"
+      },
+      {
+        "bar": 79,
+        "beat": 3,
+        "roman_numeral": "V/VI"
+      },
+      {
+        "bar": 80,
+        "beat": 1,
+        "roman_numeral": "bVI"
+      },
+      {
+        "bar": 82,
+        "beat": 1,
+        "roman_numeral": "i"
+      },
+      {
+        "bar": 83,
+        "beat": 1,
+        "roman_numeral": "IV"
+      },
+      {
+        "bar": 84,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 88,
+        "beat": 3,
+        "roman_numeral": "V7/V"
+      },
+      {
+        "bar": 89,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 90,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 97,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 98,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 100,
+        "beat": 3,
+        "roman_numeral": "V7/ii"
+      },
+      {
+        "bar": 101,
+        "beat": 1,
+        "roman_numeral": "ii"
+      },
+      {
+        "bar": 102,
+        "beat": 1,
+        "roman_numeral": "V7"
+      },
+      {
+        "bar": 104,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 105,
+        "beat": 3,
+        "roman_numeral": "V7/ii"
+      },
+      {
+        "bar": 109,
+        "beat": 1,
+        "roman_numeral": "ii"
+      },
+      {
+        "bar": 110,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 117,
+        "beat": 1,
+        "roman_numeral": "I"
+      },
+      {
+        "bar": 118,
+        "beat": 1,
+        "roman_numeral": "V"
+      },
+      {
+        "bar": 119,
+        "beat": 3,
+        "roman_numeral": "V7"
+      },
+      {
+        "bar": 120,
+        "beat": 1,
+        "roman_numeral": "I"
+      }
+    ],
+    "themes": [
+      {
+        "id": "P1",
+        "bar_start": 1,
+        "bar_end": 10,
+        "description": "Primary theme in G major; lyrical melody with Alberti-bass accompaniment, cadencing on I at bar 8 and 10"
+      },
+      {
+        "id": "P2",
+        "bar_start": 11,
+        "bar_end": 16,
+        "description": "Continuation/varied repeat of primary theme; PAC in G major at bar 16"
+      },
+      {
+        "id": "TR",
+        "bar_start": 17,
+        "bar_end": 22,
+        "description": "Transition/bridge passage; sequential rising bass line, modulating to confirm D major via PAC at bar 22"
+      },
+      {
+        "id": "S1",
+        "bar_start": 23,
+        "bar_end": 30,
+        "description": "Secondary theme in D major; graceful melodic arpeggiation with bass, PAC in D at bar 30"
+      },
+      {
+        "id": "S2",
+        "bar_start": 31,
+        "bar_end": 44,
+        "description": "Secondary theme continuation with chromatic elaboration, Neapolitan-region harmonies, and sequential passages"
+      },
+      {
+        "id": "K",
+        "bar_start": 45,
+        "bar_end": 53,
+        "description": "Closing theme (Codetta) in D major; scale and arpeggio figures confirming D major, PAC at bar 53"
+      },
+      {
+        "id": "Dev",
+        "bar_start": 54,
+        "bar_end": 71,
+        "description": "Development section; begins in d minor, explores modal mixture, sequences through related keys, returns via dominant pedal"
+      },
+      {
+        "id": "P1r",
+        "bar_start": 72,
+        "bar_end": 83,
+        "description": "Recapitulation of primary theme in G major, with variant deflecting to E minor at bar 75\u201382"
+      },
+      {
+        "id": "TRr",
+        "bar_start": 83,
+        "bar_end": 89,
+        "description": "Transition in recapitulation, passage paralleling bars 17\u201322 but remaining in G major"
+      },
+      {
+        "id": "S1r",
+        "bar_start": 90,
+        "bar_end": 97,
+        "description": "Secondary theme in G major (tonic recapitulation), PAC at bar 97"
+      },
+      {
+        "id": "S2r",
+        "bar_start": 98,
+        "bar_end": 111,
+        "description": "Secondary theme continuation in G major with chromatic elaboration, parallel to bars 31\u201344"
+      },
+      {
+        "id": "Kr",
+        "bar_start": 112,
+        "bar_end": 120,
+        "description": "Closing theme in G major; scale and arpeggio figures, final PAC at bar 120"
+      }
+    ]
+  }
+}
