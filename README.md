@@ -10,7 +10,7 @@ Built in one week as a focused AI engineering project. Evals calibrated against 
 
 ## Demo
 
-[Live demo →](https://clavier.onrender.com) <!-- update with your Render URL -->
+[Live demo →](https://clavier.onrender.com)
 
 **Recommended pieces to explore:** Beethoven Pathétique (dramatic sonata form), Chopin Nocturne Op.72 (distinctive harmonic language), Mozart K.331 Thema (clean classical structure).
 
